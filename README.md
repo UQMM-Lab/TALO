@@ -156,7 +156,7 @@ to `eval_vis_pcd_traj.py` inside `run.sh`.
 
 TALO is built upon the excellent [VGGT-SLAM](https://github.com/MIT-SPARK/VGGT-SLAM) system and integrates advanced 3D Vision Foundation Models, including
 [VGGT](https://github.com/facebookresearch/vggt),
-[$\pi^3$](https://github.com/yyfz/Pi3),
+[Pi3](https://github.com/yyfz/Pi3),
 [MapAnything](https://github.com/facebookresearch/map-anything),
 and others.
 

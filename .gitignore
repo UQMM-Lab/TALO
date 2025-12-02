@@ -170,3 +170,11 @@ dmypy.json
 **/tmp/
 **/outputs/skyseg.onnx
 skyseg.onnx
+
+
+Data/
+Save*/
+Not/
+vggt/
+Pi3/
+*.onnx

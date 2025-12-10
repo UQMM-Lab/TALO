@@ -1,3 +1,7 @@
+<div align="center">
+    <a href="https://arxiv.org/abs/2512.02341"><img src="https://img.shields.io/badge/arXiv-b33737?logo=arXiv" /></a>
+</div>
+
 # TALO: Pushing 3D Vision Foundation Models Towards Globally Consistent Online Reconstruction
 
 <!-- # Updates

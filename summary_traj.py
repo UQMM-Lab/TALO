@@ -8,7 +8,7 @@ import numpy as np
 root = sys.argv[1]
 results_all = {}
 models = ['VGGT', 'Pi3', "MapAnything"]
-methods = ["sim3", "sl4", "pose", "pose+tps+v0.05e0.005", "sim3+tps+v0.05e0.005"]
+methods = ["sim3", "sl4", "tps"]
 for scene_dir in sorted(glob.glob(os.path.join(root, "*"))):
     if not os.path.isdir(scene_dir):
         continue

@@ -267,7 +267,7 @@ def select_control_points(
         #     # Synchronize trimming of selected_vox_ids to avoid inconsistency between visualization and cp_idx
         #     selected_vox_ids = selected_vox_ids[perm]
 
-        print(len(cp_idx), "control points selected")
+        # print(len(cp_idx), "control points selected")
         # Visualization: draw selected voxel AABB + control points + original points
         if vis and cp_idx.numel() > 0:
             import numpy as np
@@ -977,7 +977,7 @@ def fit_tps(
 
     # Immediately transform src
     src_tf = model.transform(src)
-    print(torch.norm(src_tf-src, dim=1).max())
+    # print(torch.norm(src_tf-src, dim=1).max())
 
     # Visualization
     if visualize:
@@ -1151,7 +1151,7 @@ def avg_control_points(
       - Instances of each point_id (from different submaps, transformed to world) are shown as point clouds with unique colors
       - The mean of each point_id is marked with a larger sphere of the same color
     """
-    print(len(control_points), "control points before filtering")
+    # print(len(control_points), "control points before filtering")
     del_keys = []
     for pid in control_points:
         if len(control_points[pid]) < 2:
@@ -1167,7 +1167,7 @@ def avg_control_points(
                 control_points[pid] = {sid: control_points[pid][sid] for i, sid in enumerate(control_points[pid]) if mask[i]}
     for pid in del_keys:
         del control_points[pid]
-    print(len(control_points), "control points after filtering")
+    # print(len(control_points), "control points after filtering")
 
     control_points_global = {pid: [] for pid in control_points.keys()}  # pid -> submap_id -> point
     submap_points_global = {}  # sid -> [points]
@@ -1178,11 +1178,11 @@ def avg_control_points(
     #     plt.figure(figsize=(8, 4))
     #     plt.hist(
     #         control_points_count,
-    #         bins=np.arange(1, max(control_points_count) + 2, 1),  # 让每个整数落在柱子中心
+    #         bins=np.arange(1, max(control_points_count) + 2, 1),  
     #         edgecolor='black',
     #         width=1.0
     #     )
-    #     plt.xticks(range(1, max(control_points_count) + 1))  # X 轴刻度对齐整数下标
+    #     plt.xticks(range(1, max(control_points_count) + 1)) 
     #     plt.xlabel('Number of Submaps per Control Point')
     #     plt.ylabel('Count')
     #     plt.title('Histogram of Control Point Occurrences Across Submaps')
@@ -1195,7 +1195,7 @@ def avg_control_points(
             continue
         control_points_idx = [pid for pid in control_points_idx if pid in control_points and submap_id in control_points[pid]]
         control_points_local = [control_points[pid][submap_id]['3d'] for pid in control_points_idx]
-        print(f"Submap {submap_id}: {len(control_points_local)} control points")
+        # print(f"Submap {submap_id}: {len(control_points_local)} control points")
         control_points_world = _transform_points(np.asarray(control_points_local, dtype=np.float64).reshape(-1,3), reference_homographys[submap_id])
         submap_points_global[submap_id] = control_points_world
         for i, pid in enumerate(control_points_idx):
@@ -1218,7 +1218,7 @@ def avg_control_points(
         # submap_points_global_mean[submap_id] = control_points_global_mean[np.array(control_points_idx)]
         submap_points_global_mean[submap_id] = np.array([control_points_global_mean[pid] for pid in control_points_idx])
 
-    print(f"Total {len(control_points_global_mean)} unique control points")
+    # print(f"Total {len(control_points_global_mean)} unique control points")
 
 
 
@@ -1242,7 +1242,7 @@ def avg_control_points(
         submap_points_mean = submap_points_global_mean[submap_id]  # (N,3)
         assert submap_points.shape == submap_points_mean.shape and submap_points.shape[1] == 3
         N_local = submap_points.shape[0]
-        print(f"Fitting TPS for submap {submap_id} with {N_local} control points")
+        # print(f"Fitting TPS for submap {submap_id} with {N_local} control points")
 
         # random_colors = np.random.rand(len(submap_points_mean), 3)
 

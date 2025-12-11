@@ -271,14 +271,12 @@ class WaymoProcessor(object):
         self,
         load_dir,
         save_dir,
-        prefix,
         process_keys=[
             "images",
             "lidar",
             "calib",
             "dynamic_masks",
         ],
-        process_id_list=None,
         workers=64,
     ):
         self.filter_no_label_zone_points = True
@@ -288,7 +286,6 @@ class WaymoProcessor(object):
         # Available options: location_sf (main dataset)
         self.selected_waymo_locations = None
         self.save_track_id = False
-        self.process_id_list = process_id_list
         self.process_keys = process_keys
         print("will process keys: ", self.process_keys)
 
@@ -307,7 +304,7 @@ class WaymoProcessor(object):
         self.lidar_list = ["TOP", "FRONT", "SIDE_LEFT", "SIDE_RIGHT", "REAR"]
 
         self.load_dir = load_dir
-        self.save_dir = join(save_dir, prefix)
+        self.save_dir = save_dir
         self.workers = int(workers)
         # a list of tfrecord pathnames
         self.tfrecord_pathnames = sorted(glob(join(self.load_dir, "*.tfrecord")))
@@ -477,7 +474,6 @@ class WaymoProcessor(object):
 
         pts = np.concatenate(all_pts, axis=0)
 
-        # 若不需上色，直接保存 xyz
         ego2world = np.array(frame.pose.transform).reshape(4, 4)
         pts = (ego2world[:3, :3] @ pts.T + ego2world[:3, 3:4]).T
         pts.astype(np.float32).tofile(
@@ -614,10 +610,8 @@ class WaymoProcessor(object):
 
 def parse_args():
     ap = argparse.ArgumentParser("Waymo to custom format (per-scene folders; world-coord cam2world & lidar)")
-    ap.add_argument("--data_root", default="Data/waymo_raw", help="Waymo data root containing .tfrecord files")
-    ap.add_argument("--target_dir", default="Data/", help="Output root")
-    ap.add_argument("--prefix", default="waymo", help="A prefix folder under target_dir")
-    ap.add_argument("--list_file", help="A text file; each line is a relative tfrecord name (without extension)")
+    ap.add_argument("--data_root", default="/media/fengyi/bb/waymo_raw", help="Waymo data root containing .tfrecord files")
+    ap.add_argument("--target_dir", default="Data/waymo", help="Output root")
 
 
     return ap.parse_args()
@@ -628,8 +622,6 @@ def main():
     dataset_processor = WaymoProcessor(
         load_dir=args.data_root,
         save_dir=args.target_dir,
-        prefix=args.prefix,
-        process_id_list=args.list_file,
     )
     for file_idx in range(len(dataset_processor)):
         dataset_processor.convert_one(file_idx)

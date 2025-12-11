@@ -23,7 +23,7 @@ parser.add_argument("--log_path", type=str, default="poses", help="Path to save 
 parser.add_argument("--port", type=int, default=8080, help="Port for the viewer")
 
 parser.add_argument("--conf_threshold", type=int, default=60, help="Initial percentage of low-confidence points to filter out")
-parser.add_argument("--interframe_solver_choice", type=str, choices=['sim3', 'sl4', 'tps'], required=True)
+parser.add_argument("--interframe_solver_choice", default="tps", type=str, choices=['sim3', 'sl4', 'tps'])
 parser.add_argument("--model", type=str, default="VGGT", choices=["VGGT", "Pi3", "MapAnything"], help="Choice of 3D foundation model")
 parser.add_argument("--cam_num", type=int, default=6, help="Number of cameras used in the multi-camera rig")
 parser.add_argument("--submap_size", type=int, default=2, help="Number of frames per submap")
@@ -51,7 +51,7 @@ def main():
     elif 'waymo' in args.data_folder.lower():
         cam_names = ["FRONT", "FRONT_LEFT", "FRONT_RIGHT", "SIDE_LEFT", "SIDE_RIGHT"]
     else:
-        raise
+        cam_names = sorted(os.listdir(os.path.join(args.data_folder, "image")))
     if args.cam_num < len(cam_names):
         cam_names = cam_names[:args.cam_num]
     cam_num = len(cam_names)

@@ -7,7 +7,7 @@ import numpy as np
 
 root = sys.argv[1]
 results_all = {}
-methods = ["sim3", "sl4", "pose", "pose+tps+v0.05e0.005", "sim3+tps+v0.05e0.005"] #"tps+v0.05e0.005"
+methods = ["sim3", "sl4", "tps", "tps"]
 models = ["VGGT", "Pi3", "MapAnything"]
 
 for scene_dir in sorted(glob.glob(os.path.join(root, "*"))):

@@ -29,17 +29,13 @@ camera_color_map_waymo = {
     'SIDE_LEFT': [0.459, 0.439, 0.702],  # 紫 #7570b3
 }
 
-camera_color_map = [
+camera_color_map_custom = [
     [0.106, 0.620, 0.467],  # 蓝绿 #1b9e77
     [0.400, 0.651, 0.118],  # 深绿 #66a61e
     [0.914, 0.541, 0.765],  # 粉紫 #e7298a
-    
-    # [0.122, 0.471, 0.706],  # 蓝 #1f78b4
-    # [0.698, 0.874, 0.541],  # 浅绿 #b2df8a
-    # [1.000, 0.498, 0.055],  # 橙 #ff7f0e
-    # [0.890, 0.102, 0.110],  # 红 #e31a1c
-    # [0.596, 0.306, 0.639],  # 紫 #6a3d9a
-    # [0.651, 0.808, 0.890],  # 浅蓝 #a6cee3
+    [0.851, 0.373, 0.008],  # 橙棕 #d95f02
+    [0.459, 0.439, 0.702],  # 紫 #7570b3
+    [0.901, 0.670, 0.008],  # 黄褐 #e6ab02
 ]
 
 cam_list_nuscenes = ["CAM_FRONT", "CAM_FRONT_LEFT", "CAM_BACK_LEFT", "CAM_BACK", "CAM_BACK_RIGHT", "CAM_FRONT_RIGHT"]
@@ -47,8 +43,16 @@ cam_list_waymo = ["FRONT", "FRONT_LEFT", "FRONT_RIGHT", "SIDE_LEFT", "SIDE_RIGHT
 
 
 def create_camera_frustum(pose, K, img_size, color=[1, 0, 0], frustum_length=0.2, draw_axis=False):
-    fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
     h, w = img_size
+    if K is not None:
+        fx, fy, cx, cy = K[0, 0], K[1, 1], K[0, 2], K[1, 2]
+    else:
+        fy = 1.1 * h
+        fx = fy * (w / h)  
+        cx = w / 2.0
+        cy = h / 2.0
+
+        
     pts_img = np.array([[0, 0], [w, 0], [w, h], [0, h]], dtype=float)
     pts_norm = np.stack([(pts_img[:, 0] - cx) / fx, (pts_img[:, 1] - cy) / fy, np.ones(4)], axis=1)
     pts_norm *= frustum_length
@@ -90,14 +94,7 @@ def create_camera_frustum(pose, K, img_size, color=[1, 0, 0], frustum_length=0.2
         return lineset, plane, plane_back
 
 def construct_GT_points(scene_path, 
-           dataset="nuscenes",
            cam_list=None,
-           ego_range = {
-                'w': 1.73,
-                'l': 4.08,
-                'h': 1.84,
-                'eps': 0.1,
-            },
            pred_scene_path=None
            ):
     if os.path.exists(f"{scene_path}/GT_points.npz"):
@@ -115,19 +112,7 @@ def construct_GT_points(scene_path,
     all_colors = []
     lidar_on_image_mask_ls = []
     for frame in range(frame_num):
-        if dataset == 'nuscenes':
-            lidar2world = np.loadtxt(join(scene_path, f"lidar/{frame:0>{zero_pad}d}.txt"))
-            xyz_lidar = np.fromfile(join(scene_path, f"lidar/{frame:0>{zero_pad}d}.bin"), dtype=np.float32).reshape(-1, 4)[:, :3]
-            w, l, h, slack = ego_range['w'], ego_range['l'], ego_range['h'], ego_range['eps']        
-            inside_ego_range = np.array([
-                [-w/2-slack, -l*0.4-slack, -h-slack],
-                [w/2+slack, l*0.6+slack, slack]
-            ])
-            inside_mask = (xyz_lidar >= inside_ego_range[0:1]).all(1) & (xyz_lidar <= inside_ego_range[1:]).all(1) 
-            xyz_lidar = xyz_lidar[~inside_mask]
-            xyz_world = (lidar2world[:3, :3] @ xyz_lidar.T + lidar2world[:3, 3:4]).T
-        else:
-            xyz_world = np.fromfile(join(scene_path, f"lidar/{frame:0>{zero_pad}d}.bin"), dtype=np.float32).reshape(-1, 3)
+        xyz_world = np.fromfile(join(scene_path, f"lidar/{frame:0>{zero_pad}d}.bin"), dtype=np.float32).reshape(-1, 3)
         
         N = xyz_world.shape[0]
         point_rgb_sum = np.zeros((N, 3), dtype=np.uint8)
@@ -191,7 +176,7 @@ def construct_GT_points(scene_path,
     np.savez(f"{scene_path}/GT_points.npz", points=all_points, colors=all_colors)
     return all_points, all_colors, lidar_on_image_mask_ls
 
-def vis_GT(gt_path, pred_path, dataset="nuscenes"):
+def vis_GT(gt_path, pred_path, dataset="waymo"):
     zero_pad = 3
     if dataset == "nuscenes":
         cam_list=cam_list_nuscenes
@@ -202,7 +187,7 @@ def vis_GT(gt_path, pred_path, dataset="nuscenes"):
     cam_list = [cam for cam in cam_list if os.path.exists(join(pred_path, cam))]
     frame_num = len(glob.glob(join(gt_path, "lidar", "*.bin")))
     intrinsic3x3_dict = {cam: np.loadtxt(join(gt_path, f"intrinsic/{cam}.txt")) for cam in cam_list}
-    all_points, all_colors, lidar_on_image_mask_ls = construct_GT_points(gt_path, dataset=dataset, cam_list=cam_list)
+    all_points, all_colors, lidar_on_image_mask_ls = construct_GT_points(gt_path, cam_list=cam_list)
     print(f"Total GT points: {len(all_points)}")
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(all_points)
@@ -218,19 +203,23 @@ def vis_GT(gt_path, pred_path, dataset="nuscenes"):
             width, height = image.shape[1], image.shape[0]
 
             cam2world = np.loadtxt(join(gt_path, f"cam2world/{cam}/{frame:0>{zero_pad}d}.txt"))
-            geometries.extend(create_camera_frustum(cam2world, intrinsic3x3_dict[cam], (height, width), camera_color_map[cam], 1.5))
+            geometries.extend(create_camera_frustum(cam2world, intrinsic3x3_dict[cam], (height, width), camera_color_map[cam], 1))
 
     return geometries
 
-def vis_pred(gt_path, pred_path, dataset="nuscenes"):
+def vis_pred(gt_path, pred_path, dataset="waymo"):
+    cam_list = sorted([cam for cam in os.listdir(pred_path) if os.path.isdir(join(pred_path, cam))])
     if dataset == "nuscenes":
         camera_color_map = camera_color_map_nuscenes
-        cam_list=cam_list_nuscenes
-    else:
+    elif dataset == "waymo":
         camera_color_map = camera_color_map_waymo
-        cam_list=cam_list_waymo
-    cam_list = [cam for cam in cam_list if os.path.exists(join(pred_path, cam))]
-    intrinsic3x3_dict = {cam: np.loadtxt(join(gt_path, f"intrinsic/{cam}.txt")) for cam in cam_list}
+    else:
+        camera_color_map = {cam: camera_color_map_custom[i % len(camera_color_map_custom)] for i, cam in enumerate(cam_list)}
+    if os.path.exists(join(gt_path, "intrinsic")):
+        intrinsic3x3_dict = {cam: np.loadtxt(join(gt_path, f"intrinsic/{cam}.txt")) for cam in cam_list}
+    else:
+        intrinsic3x3_dict = {cam: None for cam in cam_list}
+        
 
     geometries = []
     if 'tps' in pred_path and os.path.exists(f"{pred_path}/tps_fitted_points.npz"):
@@ -248,7 +237,7 @@ def vis_pred(gt_path, pred_path, dataset="nuscenes"):
                 width, height = image.shape[1], image.shape[0]
                 pcd = np.load(f"{pred_path}/{cam}/{frame:0>3d}.npz")
                 cam2world = pcd['pose']
-                geometries.extend(create_camera_frustum(cam2world, intrinsic3x3_dict[cam], (height, width), camera_color_map[cam], 1.0/10))
+                geometries.extend(create_camera_frustum(cam2world, intrinsic3x3_dict[cam], (height, width), camera_color_map[cam], 1.0/20))
     else:
         all_points = []
         all_colors = []
@@ -267,7 +256,7 @@ def vis_pred(gt_path, pred_path, dataset="nuscenes"):
                 all_colors.append(pcd['color'][pcd['mask']])
                 cam2world = pcd['pose']
 
-                geometries.extend(create_camera_frustum(cam2world, intrinsic3x3_dict[cam], (height, width), camera_color_map[cam], 1.0/10))
+                geometries.extend(create_camera_frustum(cam2world, intrinsic3x3_dict[cam], (height, width), camera_color_map[cam], 1.0/20))
         all_points = np.concatenate(all_points, axis=0)
         all_colors = np.concatenate(all_colors, axis=0)/ 255.0
 
@@ -300,14 +289,6 @@ def load_pred(pred_path, lidar_on_image_mask_ls=[], load_pcd=False):
     else:
         cam_list = cam_list_waymo
     cam_list = [cam for cam in cam_list if os.path.exists(join(pred_path, cam))]
-    # if load_pcd:
-    #     submap_num = len(glob.glob(f"{scene_path}/*.npz"))
-    #     for submap in range(submap_num):
-    #         pcd = np.load(f"{scene_path}/{submap:0>3d}.npz")
-    #         xyz_world = pcd['pcd']
-    #         point_rgb = pcd['color']
-    #         all_points.append(xyz_world)
-    #         all_colors.append(point_rgb)
     if not load_pcd:
         cam2worlds = [[] for _ in cam_list]
         frame_num = len(glob.glob(join(pred_path, f"{cam_list[0]}/*.npz")))
@@ -331,9 +312,7 @@ def load_pred(pred_path, lidar_on_image_mask_ls=[], load_pcd=False):
     else:
         all_points = []
         all_colors = []
-        all_masks = [[] for _ in cam_list]
         cam2worlds = [[] for _ in cam_list]
-        # ipdb.set_trace()
         frame_num = len(glob.glob(join(pred_path, f"{cam_list[0]}/*.npz")))
         for frame in range(frame_num):
             for i, cam in enumerate(cam_list):
@@ -343,10 +322,8 @@ def load_pred(pred_path, lidar_on_image_mask_ls=[], load_pcd=False):
                     lidar_on_image_mask = lidar_on_image_mask_ls[frame * len(cam_list) + i].astype(np.uint8)
                     lidar_on_image_mask = cv2.resize(lidar_on_image_mask, (mask.shape[1], mask.shape[0]), interpolation=cv2.INTER_NEAREST).astype(bool)
                     mask = mask & lidar_on_image_mask
-                # ipdb.set_trace()
                 all_points.append(pcd['point'][mask])
                 all_colors.append(pcd['color'][mask])
-                # all_masks[i].append(pcd['mask'])
                 cam2worlds[i].append(pcd['pose'])
         all_points = np.concatenate(all_points, axis=0)
         all_colors = np.concatenate(all_colors, axis=0)/ 255.0
@@ -374,7 +351,7 @@ def load_GT(gt_path, pred_path, load_pcd=False):
             cam2worlds[i].append(cam2world)
     
     if load_pcd:
-        all_points, all_colors, lidar_on_image_mask_ls = construct_GT_points(gt_path, dataset='nuscenes' if 'nuscenes' in gt_path else 'waymo', cam_list=cam_list)
+        all_points, all_colors, lidar_on_image_mask_ls = construct_GT_points(gt_path, cam_list=cam_list)
         print(f"Total GT points: {len(all_points)}")
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(all_points)
@@ -753,10 +730,9 @@ def apply_sim3_to_cam2world(cam2worlds, R, t, s):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="LiDAR GT vs Pred dense point cloud evaluation")
-    parser.add_argument("--GT", default="Data/nuscenes/scene-0003/")
-    parser.add_argument("--pred", default="Data/nuscenes/scene-0012/xx")
+    parser.add_argument("--GT", default=None)
+    parser.add_argument("--pred", default=None)
     parser.add_argument("--vis", action="store_true")
-    parser.add_argument("--vis_for_drawing", action="store_true")
 
     # evaluation options
     parser.add_argument("--eval_traj", action="store_true")
@@ -766,14 +742,18 @@ if __name__ == "__main__":
     parser.add_argument("--max_error", type=float, default=10, help="Truncation for distances (meters) in metrics")
 
     args = parser.parse_args()
+    if 'nuscenes' in args.GT:
+        dataset = 'nuscenes'
+    elif 'waymo' in args.GT:
+        dataset = 'waymo'
+    else:
+        dataset = 'custom'
+
+        
 
     if args.vis:
-        # visualize(vis_GT(args.GT, args.pred, dataset='nuscenes' if 'nuscenes' in args.GT else 'waymo'), name="GT")
-        visualize(vis_pred(args.GT, args.pred, dataset='nuscenes' if 'nuscenes' in args.pred else 'waymo'), name="Pred")
-        # visualize_groups([vis_pred(args.GT, args.pred, dataset='nuscenes' if 'nuscenes' in args.pred else 'waymo'), 
-        #                   vis_pred(args.GT, args.pred.replace("tps", "sim3"), dataset='nuscenes' if 'nuscenes' in args.pred else 'waymo'),
-        #                   vis_pred(args.GT, args.pred.replace("tps", "sl4"), dataset='nuscenes' if 'nuscenes' in args.pred else 'waymo'),
-        #                 ])
+        # visualize(vis_GT(args.GT, args.pred, dataset=dataset), name="GT")
+        visualize(vis_pred(args.GT, args.pred, dataset=dataset), name=args.pred.split('/')[-1])
     
     if args.eval_traj or args.eval_pcd:
         gt_pcd, gt_cam2world, lidar_on_image_mask_ls = load_GT(args.GT, pred_path=args.pred, load_pcd=args.eval_pcd)
@@ -801,8 +781,8 @@ if __name__ == "__main__":
                 color_list = list(camera_color_map_waymo.values()) if 'waymo' in args.GT else list(camera_color_map_nuscenes.values())
                 for cam in range(len(pred_cam2world)):
                     for i in range(pred_cam2world[cam].shape[0]):
-                        pred_geoms.extend(create_camera_frustum(pred_cam2world[cam][i], intrinsic3x3_dict[cam], (shape_list[cam][0], shape_list[cam][1]), color_list[cam], 1.5))
-                visualize(pred_geoms, comparison_geometries=vis_GT(args.GT, args.pred, dataset='nuscenes' if 'nuscenes' in args.GT else 'waymo'))
+                        pred_geoms.extend(create_camera_frustum(pred_cam2world[cam][i], intrinsic3x3_dict[cam], (shape_list[cam][0], shape_list[cam][1]), color_list[cam], 1))
+                visualize(pred_geoms, comparison_geometries=vis_GT(args.GT, args.pred, dataset=dataset))
 
             
             # 4) Metrics (Pred->GT accuracy, GT->Pred completeness, symmetric Chamfer)

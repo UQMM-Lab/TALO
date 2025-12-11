@@ -20,7 +20,6 @@ git clone https://github.com/TODO/talo
 cd talo
 conda create -n talo python=3.11
 conda activate talo
-pip install -r requirements.txt
 ./setup.sh   # installs third-party dependencies required by VGGT-SLAM 
 ```
 
@@ -77,6 +76,9 @@ python extract_waymo.py
 python extract_nuscenes.py
 ```
 
+> Note that parsing Waymo requires `waymo-open-dataset-tf-2-6-0`, which depends on older package versions (e.g., `NumPy 1.x`) and is not compatible with the TALO environment.
+Therefore, please create a separate Python environment specifically for extracting Waymo.
+
 Please modify `data_root` and `save_root` accordingly in each script.
 
 These scripts will:
@@ -88,15 +90,15 @@ These scripts will:
 
 ```
 scene_dir/
+  image/
+    FRONT/
+      000.jpg
+      ...
   cam2world/
     FRONT/
       000.txt        # 4x4 matrix
       ...
     ...
-  image/
-    FRONT/
-      000.jpg
-      ...
   intrinsic/
     FRONT.txt        # 3x3 matrix
     ...
@@ -105,7 +107,31 @@ scene_dir/
     ...
 ```
 
+## Custom Data
 
+To run the system on your own data, format it as follows:
+
+```
+example_scene/
+  image/
+    cam0/
+      000.jpg
+      ...
+    ...
+```
+
+Then run:
+
+```
+python main.py --data_folder ./Data/custom_data/example_scene/ --log_path ./Save/custom_data/example_scene/VGGT+60+tps
+```
+
+for reconstruction and
+
+```
+python eval_vis_pcd_traj.py --GT ./Data/custom_data/example_scene/ --pred ./Save/custom_data/example_scene/VGGT+60+tps --vis
+```
+for visualization.
 # Run and Evaluation
 
 We provide a quick-start script that runs TALO on both Waymo and nuScenes, and summarizes results as reported in the paper.

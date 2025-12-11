@@ -372,7 +372,7 @@ class Solver:
                     given_control_points=old_control_points_3d,
                     keep_all_given=self.allow_nonvalid
                 )
-                print(colored(f"Found {len(old_control_points_keep_idx)} old control points, {len(new_control_points_idx)} new control points", "cyan"))
+                # print(colored(f"Found {len(old_control_points_keep_idx)} old control points, {len(new_control_points_idx)} new control points", "cyan"))
                 cam_to_world_ = self.current_working_submap.poses[-self.overlap_num:]
                 intrinsics_cam_ = intrinsics_cam[:self.overlap_num+self.submap_num][-self.overlap_num:]
                 current_pts_ = world_points[:self.overlap_num+self.submap_num][-self.overlap_num:]

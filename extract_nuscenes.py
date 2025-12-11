@@ -14,8 +14,13 @@ from nuscenes.utils.geometry_utils import transform_matrix
 from pyquaternion import Quaternion
 from PIL import Image
 
+w = 1.73
+l = 4.08
+h = 1.84
+eps = 0.1
+
 def extract(scene, data_root, nusc, save_root):
-    print('Processing ', scene['name'])
+    # print('Processing ', scene['name'])
     cam_list = ['CAM_FRONT', 'CAM_FRONT_LEFT', 'CAM_FRONT_RIGHT', 'CAM_BACK_LEFT', 'CAM_BACK_RIGHT', 'CAM_BACK']
     scene_dir = os.path.join(save_root, scene['name'])
     shutil.rmtree(scene_dir, ignore_errors=True)
@@ -37,24 +42,28 @@ def extract(scene, data_root, nusc, save_root):
     sample_token = first_sample_token
     while sample_token != '':
         sample = nusc.get('sample', sample_token)
-        print('Processing ', key_frame_id)
+        # print('Processing ', key_frame_id)
 
         sensor_token = sample['data']['LIDAR_TOP']
         lidar_data = nusc.get('sample_data', sensor_token)
-        lidar_path = os.path.join(data_root, lidar_data['filename'])
-        lidar_points = LidarPointCloud.from_file(lidar_path)
-        lidar_save_path = os.path.join(scene_dir, 'lidar', f'{key_frame_id:0>3d}.bin')
-        lidar_points.points.T.astype(np.float32).tofile(lidar_save_path)
-        # ######################################################################
         lidar2ego = nusc.get('calibrated_sensor', lidar_data['calibrated_sensor_token'])
         lidar2ego = transform_matrix(lidar2ego['translation'], Quaternion(lidar2ego['rotation']), inverse=False)
         ego2world = nusc.get('ego_pose', lidar_data['ego_pose_token'])
         ego2world = transform_matrix(ego2world['translation'], Quaternion(ego2world['rotation']), inverse=False)
-        ego_path = os.path.join(scene_dir, 'ego', f'{key_frame_id:0>3d}.txt')
-        np.savetxt(ego_path, ego2world)
         lidar2world = ego2world @ lidar2ego
-        lidar2world_save_path = os.path.join(scene_dir, 'lidar', f'{key_frame_id:0>3d}.txt')
-        np.savetxt(lidar2world_save_path, lidar2world)
+        # ######################################################################
+        lidar_path = os.path.join(data_root, lidar_data['filename'])
+        lidar_points = LidarPointCloud.from_file(lidar_path)
+        lidar_points.transform(lidar2world)
+        lidar_save_path = os.path.join(scene_dir, 'lidar', f'{key_frame_id:0>3d}.bin')
+        xyz_lidar = lidar_points.points.T.astype(np.float32).reshape(-1, 4)[:, :3]
+        inside_ego_range = np.array([
+            [-w/2-eps, -l*0.4-eps, -h-eps],
+            [w/2+eps, l*0.6+eps, eps]
+        ])
+        inside_mask = (xyz_lidar >= inside_ego_range[0:1]).all(1) & (xyz_lidar <= inside_ego_range[1:]).all(1) 
+        xyz_lidar = xyz_lidar[~inside_mask]
+        xyz_lidar.tofile(lidar_save_path)
         
         for sensor_name in cam_list:
             sensor_token = sample['data'][sensor_name]
@@ -62,9 +71,6 @@ def extract(scene, data_root, nusc, save_root):
             ######################################################################
             key_path = nusc.get_sample_data_path(cam_data['token'])
             key_save_path = os.path.join(scene_dir, 'image', sensor_name, f'{key_frame_id:0>3d}.jpg')
-            # image = Image.open(key_path)
-            # resized_image = image.resize(new_size)
-            # resized_image.save(key_save_path)
             shutil.copy(key_path, key_save_path)
             ######################################################################
             camera_pose = nusc.get('calibrated_sensor', cam_data['calibrated_sensor_token'])
@@ -76,12 +82,6 @@ def extract(scene, data_root, nusc, save_root):
             np.savetxt(cam2world_save_path, cam2world)
             ######################################################################
             intrinsics = np.array(camera_pose['camera_intrinsic'])
-            # intrinsics = intrinsics/downscale
-            # intrinsics[2, 2] = 1
-            # intrinsics[0, 0] *= scale_x  # fx
-            # intrinsics[1, 1] *= scale_y  # fy
-            # intrinsics[0, 2] *= scale_x  # cx
-            # intrinsics[1, 2] *= scale_y  # cy
             np.savetxt(os.path.join(scene_dir, 'intrinsic', f'{sensor_name}.txt'), intrinsics)
         key_frame_id += 1
                 
@@ -93,13 +93,20 @@ def thread_worker(scene, data_root, nusc, save_root):
     return scene['name'], result 
     
 if __name__ == "__main__":
-    split = 'val'
     data_root = '/media/fengyi/bb/nuscenes'
     save_root = f'Data/nuscenes'
 
-    scene_splits = create_splits_scenes()
     nusc = NuScenes(version='v1.0-trainval', dataroot=data_root, verbose=True)
-    scene_list = [scene for scene in nusc.scene if scene['name'] in scene_splits[split]]
+    scene_name_list = [
+        "scene-0003",
+        "scene-0012",
+        "scene-0013",
+        "scene-0036",
+        "scene-0039",
+        "scene-0092", 
+        "scene-0094", 
+    ]
+    scene_list = [scene for scene in nusc.scene if scene['name'] in scene_name_list]
 
     for scene in scene_list:
         extract(scene, data_root=data_root, nusc=nusc, save_root=save_root)

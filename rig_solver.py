@@ -2,31 +2,31 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 def plot_axis_projections_multi_camera(
-    Rs_all: np.ndarray,           # (T, C, 3, 3) 旋转矩阵序列：每时刻、每相机的 R（参考相机坐标系下）
-    body_axis: int = 2,           # 选择机体系的哪条轴：0=x, 1=y, 2=z(光轴)
-    labels: list = None,          # 相机名字，长度=C
+    Rs_all: np.ndarray,           # (T, C, 3, 3) Sequence of rotation matrices: R for each camera at each time (in the reference camera coordinate system)
+    body_axis: int = 2,           # Choose which axis of the body frame: 0=x, 1=y, 2=z (optical axis)
+    labels: list = None,          # Camera names, length=C
     title: str = None
 ):
     """
-    将“机体系某条轴”的方向向量在世界坐标系 x/y/z 上的分量随时间绘制出来。
-    不依赖均值，可直接看数据是否集中、是否有离群/突变。
+    Plot the components of "body-axis direction vectors" on world coordinate x/y/z axes over time.
+    Does not depend on mean values; directly shows whether data is concentrated or has outliers/jumps.
 
-    - 对于每个相机 c、每个时刻 t：
+    - For each camera c and frame t:
     v_{t,c} = Rs_all[t, c][:, body_axis] ∈ R^3
-    - 分别绘制 v_x(t), v_y(t), v_z(t) 三条时间序列（每张子图包含 C 条曲线）。
+    - Plot three time series v_x(t), v_y(t), v_z(t) respectively (each subplot contains C curves).
 
-    返回:
-        V: (T, C, 3) 所有方向分量堆叠，便于后续统计
+    Returns:
+        V: (T, C, 3) stacked direction components for subsequent statistics
     """
     assert Rs_all.ndim == 4 and Rs_all.shape[-2:] == (3, 3), "Rs_all must have shape (T, C, 3, 3)"
     T, C = Rs_all.shape[:2]
     assert body_axis in (0, 1, 2)
 
-    # 取每个 R 的第 body_axis 列：相机该轴在世界坐标下的方向向量
+    # Extract the body_axis column of each R: camera's axis direction in world coordinates
     # V[t, c, :] = Rs_all[t, c][:, body_axis]
     V = Rs_all[..., :, body_axis]  # shape = (T, C, 3)
 
-    # 画三张子图：world-x, world-y, world-z 分量
+    # Plot three subplots: world-x, world-y, world-z components
     fig, axs = plt.subplots(3, 1, figsize=(10, 7), sharex=True)
     world_labels = ['world-X component', 'world-Y component', 'world-Z component']
     x = np.arange(T)
@@ -50,7 +50,7 @@ def plot_axis_projections_multi_camera(
     plt.tight_layout()
     plt.show()
 
-    # 控制台输出每个相机的统计（各分量 mean/std/max）
+    # Console output of statistics for each camera (mean/std/max for each component)
     for c in range(C):
         name = labels[c] if (labels is not None and c < len(labels)) else f"cam{c}"
         stats = []
@@ -64,27 +64,27 @@ def plot_axis_projections_multi_camera(
 
 def plot_axis_on_sphere(
     Rs_all: np.ndarray,           # (T, C, 3, 3)
-    cam_index: int,               # 选择某一相机
-    body_axis: int = 2,           # 机体系轴 0/1/2
+    cam_index: int,               # Select a specific camera
+    body_axis: int = 2,           # Body frame axis 0/1/2
     title: str = None
 ):
     """
-    将某个相机的“机体系某条轴”的方向向量投到单位球上画 3D 散点。
-    若数据稳定，点应聚集在球面上某一小区；分散/双峰/离群会一目了然。
+    Project the direction vector of a specific axis of a camera onto the unit sphere and plot a 3D scatter.
+    If the data is stable, the points should cluster in a small area on the sphere; dispersion/bi-modality/outliers will be evident.
     """
     assert Rs_all.ndim == 4 and Rs_all.shape[-2:] == (3, 3)
     T, C = Rs_all.shape[:2]
     assert 0 <= cam_index < C and body_axis in (0, 1, 2)
 
     V = Rs_all[:, cam_index, :, body_axis]  # (T, 3)
-    # 归一化（理论上应已是单位向量，数值上稳妥）
+    # Normalize (theoretically should already be unit vectors, numerically safe)
     V = V / (np.linalg.norm(V, axis=1, keepdims=True) + 1e-12)
 
     from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
     fig = plt.figure(figsize=(5.2, 5.2))
     ax = fig.add_subplot(projection='3d')
     ax.scatter(V[:,0], V[:,1], V[:,2], s=12, alpha=0.8)
-    # 画坐标轴
+    # Draw coordinate axes
     ax.quiver(0,0,0, 1,0,0, length=1.0, color='r', linewidth=1.5)
     ax.quiver(0,0,0, 0,1,0, length=1.0, color='g', linewidth=1.5)
     ax.quiver(0,0,0, 0,0,1, length=1.0, color='b', linewidth=1.5)
@@ -100,7 +100,6 @@ def plot_axis_on_sphere(
 
     return V
 
-# ---------- 工具函数（SO(3) 与 so(3)） ----------
 
 def _skew(w):
     return np.array([[0, -w[2], w[1]],
@@ -153,11 +152,10 @@ def geodesic_angle(Ra, Rb):
     x = (np.trace(R) - 1.0) * 0.5
     return np.arccos(np.clip(x, -1.0, 1.0))
 
-# ---------- 1) Chordal L2（基线，已在用） ----------
 
 def chordal_L2_mean_rotation(Rs: np.ndarray) -> np.ndarray:
     """
-    线性快：对旋转矩阵求和再极分解投影回 SO(3)
+    Linear (fast): sum rotation matrices and project back to SO(3) via SVD
     """
     assert Rs.ndim == 3 and Rs.shape[1:] == (3, 3)
     M = np.sum(Rs, axis=0)
@@ -172,10 +170,10 @@ def chordal_L2_mean_rotation(Rs: np.ndarray) -> np.ndarray:
 
 def karcher_L2_mean_rotation(Rs: np.ndarray, iters: int = 30, tol: float = 1e-12) -> np.ndarray:
     """
-    在 SO(3) 上做 Karcher 均值（测地 L2）
+    Karcher mean (geodesic L2) on SO(3)
     """
     assert Rs.ndim == 3 and Rs.shape[1:] == (3, 3)
-    # 用 chordal 结果作为初值更稳
+    # Use chordal result as initial value for stability
     R = chordal_L2_mean_rotation(Rs)
     for _ in range(iters):
         dsum = np.zeros(3)
@@ -188,7 +186,7 @@ def karcher_L2_mean_rotation(Rs: np.ndarray, iters: int = 30, tol: float = 1e-12
             break
     return R
 
-# ---------- 3) Quaternion L2（快速近似） ----------
+# ---------- 3) Quaternion L2 (fast approximation) ----------
 
 def _R_to_q(R):
     """Rotation matrix -> unit quaternion (w,x,y,z)"""
@@ -237,11 +235,11 @@ def _q_to_R(q):
 
 def quaternion_L2_mean_rotation(Rs: np.ndarray) -> np.ndarray:
     """
-    四元数 L2 平均：对齐半球后做欧氏平均并归一化（快速、好用的近似）
+    Quaternion L2 mean: align hemispheres, then do Euclidean average and normalize (fast, good approximation)
     """
     assert Rs.ndim == 3 and Rs.shape[1:] == (3, 3)
     qs = np.stack([_R_to_q(R) for R in Rs], axis=0)  # (T,4)
-    # 对齐符号到第一个四元数的半球
+    # Align signs to the hemisphere of the first quaternion
     ref = qs[0]
     dots = np.dot(qs, ref)
     qs[dots < 0] *= -1.0
@@ -249,14 +247,14 @@ def quaternion_L2_mean_rotation(Rs: np.ndarray) -> np.ndarray:
     q_mean /= (np.linalg.norm(q_mean) + 1e-15)
     return _q_to_R(q_mean)
 
-# ---------- 4) Geodesic L1（Weiszfeld on SO(3)，鲁棒中位数） ----------
+# ---------- 4) Geodesic L1 (Weiszfeld on SO(3), robust median) ----------
 
 def geodesic_L1_mean_rotation(Rs: np.ndarray, iters: int = 60, tol: float = 1e-10, eps: float = 1e-8) -> np.ndarray:
     """
-    SO(3) 上的几何中位数（Weiszfeld）：对离群更鲁棒
+    Geodesic L1 median on SO(3) (Weiszfeld): more robust to outliers
     """
     assert Rs.ndim == 3 and Rs.shape[1:] == (3, 3)
-    # 用 Karcher L2 结果作初值更稳
+    # Use Karcher L2 result as initial value for stability
     R = karcher_L2_mean_rotation(Rs, iters=15)
     for _ in range(iters):
         num = np.zeros(3)
@@ -264,7 +262,7 @@ def geodesic_L1_mean_rotation(Rs: np.ndarray, iters: int = 60, tol: float = 1e-1
         for Ri in Rs:
             v = so3_log(R.T @ Ri)  # tangent error
             n = np.linalg.norm(v)
-            w = 1.0 / max(n, eps)  # Weiszfeld 权重
+            w = 1.0 / max(n, eps)  # Weiszfeld weight
             num += w * v
             den += w
         step = num / max(den, eps)
@@ -274,11 +272,11 @@ def geodesic_L1_mean_rotation(Rs: np.ndarray, iters: int = 60, tol: float = 1e-1
             break
     return R
 
-# ---------- 5) Truncated-L2 / IRLS（截断式鲁棒 L2） ----------
+# ---------- 5) Truncated-L2 / IRLS (Truncated robust L2) ----------
 
 def truncated_L2_mean_rotation(Rs: np.ndarray, tau_deg: float = 5.0, iters: int = 20, tol: float = 1e-10) -> np.ndarray:
     """
-    截断式 L2（近似 TLUD 思想）：大角度残差降权；小角度近似 L2。
+    Truncated L2 (approximate TLUD idea): downweight large-angle residuals; approximate L2 for small angles.
     """
     assert Rs.ndim == 3 and Rs.shape[1:] == (3, 3)
     R = chordal_L2_mean_rotation(Rs)
@@ -292,7 +290,7 @@ def truncated_L2_mean_rotation(Rs: np.ndarray, tau_deg: float = 5.0, iters: int 
             if a < 1e-12:
                 w = 1.0
             else:
-                # 截断式权重：a<=tau 时 w=1；a>tau 时 w=tau/a
+                # Truncated weight: w=1 if a<=tau; w=tau/a if a>tau
                 w = min(1.0, tau / a)
             num += w * v
             den += w
@@ -315,15 +313,15 @@ def cal_rig(cam2worlds: np.ndarray, vis=False) -> np.ndarray:
                 cam_index=i,
             )
     """
-    输入:
+    Input:
       cam2worlds: (T, C, 4, 4)
-        - 表示在每个时刻 t，每个相机 c 的位姿都已经表达在“该时刻参考相机(索引0)”的坐标系下
-        - 因而 cam2worlds[:, 0] 应该是单位矩阵（或非常接近）
+        - The pose of each camera c at each time t is expressed in the coordinate system of the "reference camera (index 0)" at that time
+        - Therefore, cam2worlds[:, 0] should be the identity matrix (or very close to it)
 
-    输出:
+    Output:
       rig_poses: (C, 4, 4)
-        - 第 0 个相机为 4x4 单位阵
-        - 其余相机为在参考相机坐标系下的“平均位姿”（旋转 chordal-L2 平均 + 平移欧氏均值）
+        - The 0th camera is a 4x4 identity matrix
+        - The other cameras are the "average poses" in the reference camera coordinate system (rotation chordal-L2 mean + translation Euclidean mean)
     """
     assert cam2worlds.ndim == 4 and cam2worlds.shape[-2:] == (4, 4), "cam2worlds shape must be (T, C, 4, 4)"
     T, C = cam2worlds.shape[:2]
@@ -331,12 +329,12 @@ def cal_rig(cam2worlds: np.ndarray, vis=False) -> np.ndarray:
     rig_poses = np.zeros((C, 4, 4), dtype=np.float64)
     rig_poses[:] = np.eye(4)
 
-    # 可选：检查参考相机是否接近单位阵
-    # （不是硬约束，只做提示）
+    # Optional: check if the reference camera is close to identity matrix
+    # (not a hard constraint, just a warning)
     ref_poses = cam2worlds[:, 0]  # (T, 4, 4)
     ref_dev = np.linalg.norm(ref_poses - np.eye(4), axis=(1, 2)).mean()
     if ref_dev > 1e-6:
-        print(f"[Warn] cam2worlds[:,0] 偏离单位阵的平均范数 = {ref_dev:.3e}，请确认输入是否已转到参考相机坐标系。")
+        print(f"[Warn] Average norm of deviation of cam2worlds[:,0] from identity matrix = {ref_dev:.3e}, please ensure the input is transformed to the reference camera coordinate system.")
 
     for c in range(C):
         if c == 0:
@@ -347,16 +345,16 @@ def cal_rig(cam2worlds: np.ndarray, vis=False) -> np.ndarray:
         Rc = Tc[:, :3, :3]     # (T, 3, 3)
         tc = Tc[:, :3, 3]      # (T, 3)
 
-        # 旋转平均（baseline：chordal L2）
+        # Rotation averaging (baseline: chordal L2)
         R_mean = chordal_L2_mean_rotation(Rc)
 
         
 
 
-        # 平均平移（都在参考相机坐标系下，可以直接欧氏平均）
+        # Translation averaging (all in reference camera coordinate system, so Euclidean average is fine)
         t_mean = np.mean(tc, axis=0)
 
-        # 组装 4x4
+        # Assemble 4x4
         rig_poses[c, :3, :3] = R_mean
         rig_poses[c, :3, 3]   = t_mean
         rig_poses[c, 3, 3]    = 1.0
@@ -364,46 +362,3 @@ def cal_rig(cam2worlds: np.ndarray, vis=False) -> np.ndarray:
     return rig_poses
 
 
-# =============== 示例用法 ===============
-if __name__ == "__main__":
-    # 假设我们有 T=5, C=3 的示例数据
-    T, C = 5, 3
-    cam2worlds = np.zeros((T, C, 4, 4), dtype=np.float64)
-    cam2worlds[:] = np.eye(4)
-
-    # 人为构造：相机1/2 相对参考相机的恒定位姿 + 小噪声
-    R1 = np.array([[ 0.0, -1.0, 0.0],
-                   [ 1.0,  0.0, 0.0],
-                   [ 0.0,  0.0, 1.0]])
-    t1 = np.array([0.5, 0.1, 0.0])
-
-    R2 = np.array([[ 0.8660254, 0.0, 0.5],
-                   [ 0.0,       1.0, 0.0],
-                   [-0.5,       0.0, 0.8660254]])
-    t2 = np.array([-0.4, 0.2, 0.0])
-
-    rng = np.random.default_rng(0)
-    def add_small_noise_T(R, t, noise_rot_deg=0.3, noise_t=0.01):
-        # 极小噪声：用轴角小扰动近似 + 平移高斯噪声
-        theta = np.deg2rad(noise_rot_deg)
-        axis = rng.normal(size=3)
-        axis /= (np.linalg.norm(axis) + 1e-12)
-        K = np.array([[0, -axis[2], axis[1]],
-                      [axis[2], 0, -axis[0]],
-                      [-axis[1], axis[0], 0]])
-        Rn = np.eye(3) + np.sin(theta)*K + (1-np.cos(theta))*(K@K)
-        tn = t + rng.normal(scale=noise_t, size=3)
-        T = np.eye(4)
-        T[:3,:3] = Rn @ R
-        T[:3, 3] = tn
-        return T
-
-    for t in range(T):
-        # 参考相机 = 单位
-        cam2worlds[t, 0] = np.eye(4)
-        cam2worlds[t, 1] = add_small_noise_T(R1, t1)
-        cam2worlds[t, 2] = add_small_noise_T(R2, t2)
-
-    rig = cal_rig(cam2worlds)
-    np.set_printoptions(precision=4, suppress=True)
-    print("Estimated rig (C x 4 x 4):\n", rig)
